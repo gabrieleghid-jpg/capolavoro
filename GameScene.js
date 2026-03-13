@@ -1,0 +1,157 @@
+import * as THREE from 'three';
+import { Player } from './Player.js';
+import { Arena } from './Arena.js';
+import { Config } from './Config.js';
+
+export class GameScene {
+    constructor(container) {
+        this.container = container;
+        this.init();
+    }
+
+    init() {
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x1a1a2e);
+        this.scene.fog = new THREE.FogExp2(0x1a1a2e, 0.008);
+
+        this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(0, 30, 50);
+        this.camera.lookAt(0, 0, 0);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.container.appendChild(this.renderer.domElement);
+
+        // Brighter Lights
+        const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+        this.scene.add(ambient);
+
+        const moonLight = new THREE.DirectionalLight(0xccccff, 2.5);
+        moonLight.position.set(20, 50, 30);
+        moonLight.castShadow = true;
+        this.scene.add(moonLight);
+
+        // Accent lights
+        const orangeLight = new THREE.PointLight(0xffaa00, 20, 50);
+        orangeLight.position.set(0, 5, 0);
+        this.scene.add(orangeLight);
+
+        // Arena
+        this.arena = new Arena();
+        this.scene.add(this.arena);
+
+        // Players
+        this.player1 = new Player(1, Config.colors.player1, -8);
+        this.player2 = new Player(2, Config.colors.player2, 8);
+        this.scene.add(this.player1);
+        this.scene.add(this.player2);
+
+        // Input
+        this.keys = {};
+        window.addEventListener('keydown', (e) => {
+            this.keys[e.code] = true;
+            this.handlePlayerAction(e.code);
+        });
+        window.addEventListener('keyup', (e) => this.keys[e.code] = false);
+
+        window.addEventListener('resize', () => {
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        this.clock = new THREE.Clock();
+        this.animate();
+    }
+
+    handlePlayerAction(code) {
+        // Single press actions
+        if (code === 'Space' || code === 'ArrowUp') this.player1.jump();
+        if (code === 'KeyE' || code === 'ShiftLeft') this.player1.dash();
+        if (code === 'KeyF' || code === 'KeyZ') this.player1.attack();
+    }
+
+    updateAI(deltaTime) {
+        const p2 = this.player2;
+        const p1 = this.player1;
+        const dist = p2.position.distanceTo(p1.position);
+
+        if (p2.isStunned) return;
+
+        // Follow player 1 in 3D
+        if (p1.position.x < p2.position.x - 2) p2.velocity.x -= Config.moveSpeed;
+        else if (p1.position.x > p2.position.x + 2) p2.velocity.x += Config.moveSpeed;
+
+        if (p1.position.z < p2.position.z - 2) p2.velocity.z -= Config.moveSpeed;
+        else if (p1.position.z > p2.position.z + 2) p2.velocity.z += Config.moveSpeed;
+
+        // Rotate to face player 1
+        const angle = Math.atan2(p1.position.x - p2.position.x, p1.position.z - p2.position.z);
+        p2.mesh.rotation.y = angle;
+
+        if (p1.position.y > p2.position.y + 2 && p2.isGrounded && Math.random() < 0.05) p2.jump();
+        if (dist < 4 && !p2.isAttacking && Math.random() < 0.04) p2.attack();
+    }
+
+    checkAttacks() {
+        this.checkPlayerAttack(this.player1, this.player2);
+        this.checkPlayerAttack(this.player2, this.player1);
+    }
+
+    checkPlayerAttack(attacker, victim) {
+        if (!attacker.isAttacking) return;
+        
+        // 3D spherical check around hitbox
+        const hitboxPos = new THREE.Vector3().copy(attacker.hitboxMesh.position).applyMatrix4(attacker.matrixWorld);
+        const dist = hitboxPos.distanceTo(victim.position);
+
+        if (dist < 2.5) {
+            victim.damage += 15;
+            victim.applyKnockback(0.45, attacker.position);
+            this.createHitEffect(victim.position);
+            attacker.isAttacking = false;
+        }
+    }
+
+    createHitEffect(pos) {
+        const flare = new THREE.PointLight(0xffffff, 15, 10);
+        flare.position.copy(pos);
+        this.scene.add(flare);
+        setTimeout(() => this.scene.remove(flare), 100);
+    }
+
+    updateUI() {
+        const p1Div = document.getElementById('p1-damage');
+        const p2Div = document.getElementById('p2-damage');
+        if (p1Div) p1Div.innerText = `${Math.floor(this.player1.damage)}%`;
+        if (p2Div) p2Div.innerText = `${Math.floor(this.player2.damage)}%`;
+    }
+
+    animate() {
+        requestAnimationFrame(() => this.animate());
+        const deltaTime = Math.min(this.clock.getDelta(), 0.1);
+
+        this.player1.handleInput(this.keys);
+        this.updateAI(deltaTime);
+
+        this.player1.update(deltaTime, this.arena.platforms);
+        this.player2.update(deltaTime, this.arena.platforms);
+
+        this.checkAttacks();
+        this.updateUI();
+
+        // Dynamic 3D Camera
+        const midPoint = new THREE.Vector3().addVectors(this.player1.position, this.player2.position).multiplyScalar(0.5);
+        const dist = this.player1.position.distanceTo(this.player2.position);
+        
+        const idealOffset = new THREE.Vector3(0, 15 + dist * 0.5, 25 + dist * 0.8);
+        const targetPos = midPoint.clone().add(idealOffset);
+        
+        this.camera.position.lerp(targetPos, 0.05);
+        this.camera.lookAt(midPoint.x, midPoint.y + 2, midPoint.z);
+
+        this.renderer.render(this.scene, this.camera);
+    }
+}
