@@ -56,6 +56,11 @@ export class GameScene {
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
+        // Attacco con click sinistro del mouse
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0) this.player1.attack();
+        });
+
         window.addEventListener('resize', () => {
             this.camera.aspect = window.innerWidth / window.innerHeight;
             this.camera.updateProjectionMatrix();
@@ -70,7 +75,7 @@ export class GameScene {
         // Single press actions
         if (code === 'Space' || code === 'ArrowUp') this.player1.jump();
         if (code === 'KeyE' || code === 'ShiftLeft') this.player1.dash();
-        if (code === 'KeyF' || code === 'KeyZ') this.player1.attack();
+        // Attacco rimosso da qui: ora si usa il click sinistro del mouse
     }
 
     updateAI(deltaTime) {
