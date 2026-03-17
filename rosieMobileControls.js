@@ -2,7 +2,7 @@
  * Mobile Controls - Handles all mobile-specific input and UI
  * Works by simulating keyboard/mouse events to integrate with existing desktop controls
  */
-
+//
 /**
  * Utility functions for mobile detection and UI management
  */
