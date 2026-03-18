@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { Config } from './Config.js';
+import { Config } from './Config.js';  
 
 export class Arena extends THREE.Group {
 
@@ -10,7 +10,7 @@ export class Arena extends THREE.Group {
 
         this.platforms = [];
 
-        this.init();
+        this.init(); //
 
     }
 
