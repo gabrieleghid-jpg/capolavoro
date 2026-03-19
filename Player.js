@@ -29,6 +29,7 @@ export class Player extends THREE.Group {
         this.isGrounded = false;
         this.jumpsLeft = 2;
         this.dashCooldown = 0;
+        this.dashDirection = new THREE.Vector3();
         
         this.damage = 0;
         this.isStunned = false;
@@ -102,13 +103,13 @@ export class Player extends THREE.Group {
         this.isDashing = true;
         this.dashTimer = 0.2;
         this.dashCooldown = 0.8;
-        
+
         const dashDir = new THREE.Vector3(this.velocity.x, 0, this.velocity.z).normalize();
         if (dashDir.lengthSq() < 0.1) dashDir.set(Math.sin(this.mesh.rotation.y), 0, Math.cos(this.mesh.rotation.y));
 
-        this.velocity.x = dashDir.x * Config.dashForce * 15;
-        this.velocity.z = dashDir.z * Config.dashForce * 15;
-        this.velocity.y = 0;
+        this.dashDirection = dashDir.clone();
+        this.velocity.x = 0;
+        this.velocity.z = 0;
     }
 
     attack() {
@@ -153,7 +154,14 @@ export class Player extends THREE.Group {
 
         if (this.isDashing) {
             this.dashTimer -= deltaTime;
-            if (this.dashTimer <= 0) this.isDashing = false;
+            const progress = Math.max(0, this.dashTimer / 0.35);
+            this.velocity.x = this.dashDirection.x * Config.dashForce * 15 * progress;
+            this.velocity.z = this.dashDirection.z * Config.dashForce * 15 * progress;
+            if (this.dashTimer <= 0) {
+                this.isDashing = false;
+                this.velocity.x = 0;
+                this.velocity.z = 0;
+            }
         }
 
         const steps = Math.ceil(Math.abs(this.velocity.y) / 0.5);
@@ -225,4 +233,4 @@ export class Player extends THREE.Group {
         this.jumpsLeft = 2;
         this.isFastFalling = false;
     }
-}
+} 

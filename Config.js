@@ -1,10 +1,10 @@
 export const Config = {
-    gravity: -0.016,
-    jumpForce: 1.6,
+    gravity: -0.017,
+    jumpForce: 1.4,
     moveSpeed: 0.20,
     maxMoveSpeed: 7.0,
     airControl: 0.40,
-    dashForce: 0.55,
+    dashForce: 0.25,
     drag: 0.75,
     airDrag: 0.82,
     maxFallSpeed: -3.2,
