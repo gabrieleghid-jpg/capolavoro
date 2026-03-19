@@ -64,8 +64,21 @@ export class Player extends THREE.Group {
             moveZ += Config.moveSpeed;
         }
 
-        this.velocity.x += moveX;
-        this.velocity.z += moveZ;
+        // Imposta direttamente la velocità orizzontale invece di accumularla
+        if (moveX !== 0) {
+            this.velocity.x = THREE.MathUtils.clamp(
+                this.velocity.x + moveX,
+                -Config.maxMoveSpeed,
+                Config.maxMoveSpeed
+            );
+        }
+        if (moveZ !== 0) {
+            this.velocity.z = THREE.MathUtils.clamp(
+                this.velocity.z + moveZ,
+                -Config.maxMoveSpeed,
+                Config.maxMoveSpeed
+            );
+        }
 
         if (Math.abs(moveX) > 0.001 || Math.abs(moveZ) > 0.001) {
             const angle = Math.atan2(moveX, moveZ);
@@ -92,8 +105,8 @@ export class Player extends THREE.Group {
         const dashDir = new THREE.Vector3(this.velocity.x, 0, this.velocity.z).normalize();
         if (dashDir.lengthSq() < 0.1) dashDir.set(Math.sin(this.mesh.rotation.y), 0, Math.cos(this.mesh.rotation.y));
 
-        this.velocity.x = dashDir.x * Config.dashForce * 2.5;
-        this.velocity.z = dashDir.z * Config.dashForce * 2.5;
+        this.velocity.x = dashDir.x * Config.dashForce * 15;
+        this.velocity.z = dashDir.z * Config.dashForce * 15;
         this.velocity.y = 0;
     }
 

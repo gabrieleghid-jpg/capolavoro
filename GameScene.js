@@ -56,7 +56,6 @@ export class GameScene {
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
-        // Attacco con click sinistro del mouse
         window.addEventListener('mousedown', (e) => {
             if (e.button === 0) this.player1.attack();
         });
@@ -72,43 +71,23 @@ export class GameScene {
     }
 
     handlePlayerAction(code) {
-        // Single press actions
         if (code === 'Space' || code === 'ArrowUp') this.player1.jump();
         if (code === 'KeyE' || code === 'ShiftLeft') this.player1.dash();
-        // Attacco rimosso da qui: ora si usa il click sinistro del mouse
     }
 
+    // AI completamente disabilitata — player2 rimane fermo
     updateAI(deltaTime) {
-        const p2 = this.player2;
-        const p1 = this.player1;
-        const dist = p2.position.distanceTo(p1.position);
-
-        if (p2.isStunned) return;
-
-        // Follow player 1 in 3D
-        if (p1.position.x < p2.position.x - 2) p2.velocity.x -= Config.moveSpeed;
-        else if (p1.position.x > p2.position.x + 2) p2.velocity.x += Config.moveSpeed;
-
-        if (p1.position.z < p2.position.z - 2) p2.velocity.z -= Config.moveSpeed;
-        else if (p1.position.z > p2.position.z + 2) p2.velocity.z += Config.moveSpeed;
-
-        // Rotate to face player 1
-        const angle = Math.atan2(p1.position.x - p2.position.x, p1.position.z - p2.position.z);
-        p2.mesh.rotation.y = angle;
-
-        if (p1.position.y > p2.position.y + 2 && p2.isGrounded && Math.random() < 0.05) p2.jump();
-        if (dist < 4 && !p2.isAttacking && Math.random() < 0.04) p2.attack();
+        // nessun movimento, nessun attacco
     }
 
     checkAttacks() {
+        // Solo player1 può colpire player2, non viceversa
         this.checkPlayerAttack(this.player1, this.player2);
-        this.checkPlayerAttack(this.player2, this.player1);
     }
 
     checkPlayerAttack(attacker, victim) {
         if (!attacker.isAttacking) return;
         
-        // 3D spherical check around hitbox
         const hitboxPos = new THREE.Vector3().copy(attacker.hitboxMesh.position).applyMatrix4(attacker.matrixWorld);
         const dist = hitboxPos.distanceTo(victim.position);
 
