@@ -1,10 +1,10 @@
 export const Config = {
-    gravity: -0.015,
-    jumpForce: 0.75,
-    moveSpeed: 0.035,
-    dashForce: 0.6,
-    drag: 0.88,
-    airDrag: 0.98,
+    gravity: -0.04,
+    jumpForce: 1.30,
+    moveSpeed: 0.2,
+    dashForce: 0.5,
+    drag: 0.90,
+    airDrag: 0.83,
     knockbackMultiplier: 0.015,
     arenaBounds: {
         x: 80,
