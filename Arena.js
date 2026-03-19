@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import { Config } from './Config.js';  
-
+//
 export class Arena extends THREE.Group {
 
     constructor() {
