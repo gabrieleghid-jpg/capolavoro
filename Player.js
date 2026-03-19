@@ -64,17 +64,18 @@ export class Player extends THREE.Group {
             moveZ += Config.moveSpeed;
         }
 
-        // Imposta direttamente la velocità orizzontale invece di accumularla
+        const airControl = this.isGrounded ? 1.0 : Config.airControl;
+
         if (moveX !== 0) {
             this.velocity.x = THREE.MathUtils.clamp(
-                this.velocity.x + moveX,
+                this.velocity.x + moveX * airControl,
                 -Config.maxMoveSpeed,
                 Config.maxMoveSpeed
             );
         }
         if (moveZ !== 0) {
             this.velocity.z = THREE.MathUtils.clamp(
-                this.velocity.z + moveZ,
+                this.velocity.z + moveZ * airControl,
                 -Config.maxMoveSpeed,
                 Config.maxMoveSpeed
             );
@@ -155,7 +156,6 @@ export class Player extends THREE.Group {
             if (this.dashTimer <= 0) this.isDashing = false;
         }
 
-        // Sposta il personaggio in piccoli step per evitare il tunnel attraverso le piattaforme
         const steps = Math.ceil(Math.abs(this.velocity.y) / 0.5);
         const stepVelY = this.velocity.y / steps;
 
@@ -181,7 +181,6 @@ export class Player extends THREE.Group {
                 const feetY = this.position.y - 1;
                 const headY = this.position.y + 1;
 
-                // Atterraggio dall'alto
                 if (stepVelY <= 0 && feetY <= platTop && feetY >= platBot) {
                     this.position.y = platTop + 1;
                     this.velocity.y = 0;
@@ -189,7 +188,6 @@ export class Player extends THREE.Group {
                     this.jumpsLeft = 2;
                     this.isFastFalling = false;
                 }
-                // Colpisce dal basso
                 else if (stepVelY > 0 && headY >= platBot && headY <= platTop) {
                     this.position.y = platBot - 1;
                     this.velocity.y = 0;
