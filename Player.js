@@ -7,7 +7,6 @@ export class Player extends THREE.Group {
         this.playerId = id;
         this.color = color;
 
-        // Visuals
         const geometry = new THREE.BoxGeometry(1.2, 2, 1.2);
         const material = new THREE.MeshStandardMaterial({ 
             color: color,
@@ -19,21 +18,18 @@ export class Player extends THREE.Group {
         this.mesh = new THREE.Mesh(geometry, material);
         this.add(this.mesh);
 
-        // Hitbox visual
         this.hitboxMesh = new THREE.Mesh(
             new THREE.BoxGeometry(2, 2, 2),
             new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, visible: false })
         );
         this.add(this.hitboxMesh);
 
-        // Physics
         this.position.set(initialX, 5, 0);
         this.velocity = new THREE.Vector3();
         this.isGrounded = false;
         this.jumpsLeft = 2;
         this.dashCooldown = 0;
         
-        // Combat
         this.damage = 0;
         this.isStunned = false;
         this.stunTimer = 0;
@@ -41,6 +37,7 @@ export class Player extends THREE.Group {
         this.dashTimer = 0;
         this.attackTimer = 0;
         this.isAttacking = false;
+        this.isFastFalling = false;
     }
 
     handleInput(keys) {
@@ -57,12 +54,19 @@ export class Player extends THREE.Group {
         if (left) moveX -= Config.moveSpeed;
         if (right) moveX += Config.moveSpeed;
         if (up) moveZ -= Config.moveSpeed;
-        if (down) moveZ += Config.moveSpeed;
+
+        if (down && !this.isGrounded) {
+            if (!this.isFastFalling && this.velocity.y < 0) {
+                this.velocity.y = Config.maxFallSpeed * Config.fastFallMultiplier;
+                this.isFastFalling = true;
+            }
+        } else if (down) {
+            moveZ += Config.moveSpeed;
+        }
 
         this.velocity.x += moveX;
         this.velocity.z += moveZ;
 
-        // Visual Rotation
         if (Math.abs(moveX) > 0.001 || Math.abs(moveZ) > 0.001) {
             const angle = Math.atan2(moveX, moveZ);
             this.mesh.rotation.y = angle;
@@ -75,6 +79,7 @@ export class Player extends THREE.Group {
             this.velocity.y = Config.jumpForce;
             this.jumpsLeft--;
             this.isGrounded = false;
+            this.isFastFalling = false;
         }
     }
 
@@ -116,11 +121,15 @@ export class Player extends THREE.Group {
         this.stunTimer = Math.min(1.0, 0.2 + this.damage * 0.005);
         this.isAttacking = false;
         this.hitboxMesh.visible = false;
+        this.isFastFalling = false;
     }
 
     update(deltaTime, platforms) {
         if (!this.isGrounded && !this.isDashing) {
             this.velocity.y += Config.gravity;
+            if (this.velocity.y < Config.maxFallSpeed) {
+                this.velocity.y = Config.maxFallSpeed;
+            }
         }
 
         const drag = this.isGrounded ? Config.drag : Config.airDrag;
@@ -133,21 +142,48 @@ export class Player extends THREE.Group {
             if (this.dashTimer <= 0) this.isDashing = false;
         }
 
+        // Sposta il personaggio in piccoli step per evitare il tunnel attraverso le piattaforme
+        const steps = Math.ceil(Math.abs(this.velocity.y) / 0.5);
+        const stepVelY = this.velocity.y / steps;
+
         this.position.x += this.velocity.x;
-        this.position.y += this.velocity.y;
         this.position.z += this.velocity.z;
 
         this.isGrounded = false;
-        for (const platform of platforms) {
-            if (this.checkCollision(platform)) {
+
+        for (let s = 0; s < steps; s++) {
+            this.position.y += stepVelY;
+
+            for (const platform of platforms) {
                 const platTop = platform.position.y + platform.geometry.parameters.height / 2;
-                if (this.velocity.y <= 0 && this.position.y - 0.5 > platTop - 0.5) {
-                    this.position.y = platTop + 1.01;
+                const platBot = platform.position.y - platform.geometry.parameters.height / 2;
+
+                const inXZ = this.position.x + 0.6 > platform.position.x - platform.geometry.parameters.width / 2 &&
+                             this.position.x - 0.6 < platform.position.x + platform.geometry.parameters.width / 2 &&
+                             this.position.z + 0.6 > platform.position.z - platform.geometry.parameters.depth / 2 &&
+                             this.position.z - 0.6 < platform.position.z + platform.geometry.parameters.depth / 2;
+
+                if (!inXZ) continue;
+
+                const feetY = this.position.y - 1;
+                const headY = this.position.y + 1;
+
+                // Atterraggio dall'alto
+                if (stepVelY <= 0 && feetY <= platTop && feetY >= platBot) {
+                    this.position.y = platTop + 1;
                     this.velocity.y = 0;
                     this.isGrounded = true;
                     this.jumpsLeft = 2;
+                    this.isFastFalling = false;
+                }
+                // Colpisce dal basso
+                else if (stepVelY > 0 && headY >= platBot && headY <= platTop) {
+                    this.position.y = platBot - 1;
+                    this.velocity.y = 0;
                 }
             }
+
+            if (this.isGrounded) break;
         }
 
         if (this.dashCooldown > 0) this.dashCooldown -= deltaTime;
@@ -170,31 +206,12 @@ export class Player extends THREE.Group {
         }
     }
 
-    checkCollision(platform) {
-        const p1 = {
-            minX: this.position.x - 0.6, maxX: this.position.x + 0.6,
-            minY: this.position.y - 1, maxY: this.position.y + 1,
-            minZ: this.position.z - 0.6, maxZ: this.position.z + 0.6
-        };
-        const p2 = {
-            minX: platform.position.x - platform.geometry.parameters.width / 2,
-            maxX: platform.position.x + platform.geometry.parameters.width / 2,
-            minY: platform.position.y - platform.geometry.parameters.height / 2,
-            maxY: platform.position.y + platform.geometry.parameters.height / 2,
-            minZ: platform.position.z - platform.geometry.parameters.depth / 2,
-            maxZ: platform.position.z + platform.geometry.parameters.depth / 2
-        };
-
-        return p1.minX < p2.maxX && p1.maxX > p2.minX && 
-               p1.minY < p2.maxY && p1.maxY > p2.minY &&
-               p1.minZ < p2.maxZ && p1.maxZ > p2.minZ;
-    }
-
     respawn() {
         this.position.set(Math.random() * 10 - 5, 15, Math.random() * 10 - 5);
         this.velocity.set(0, 0, 0);
         this.damage = 0;
         this.isStunned = false;
         this.jumpsLeft = 2;
+        this.isFastFalling = false;
     }
 }
