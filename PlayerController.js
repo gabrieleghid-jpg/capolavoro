@@ -33,6 +33,16 @@ export class PlayerController {
     document.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
     });
+
+    // Mouse left click  → light attack
+    document.addEventListener('mousedown', (e) => {
+      if (e.button === 0) this.player.startLightAttack();
+    });
+
+    // Mouse right click → heavy attack
+    document.addEventListener('mousedown', (e) => {
+      if (e.button === 2) this.player.startHeavyAttack();
+    });
   }
 
   setCameraMode(mode) {

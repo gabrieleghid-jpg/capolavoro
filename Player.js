@@ -39,7 +39,138 @@ export class Player extends THREE.Group {
         this.attackTimer = 0;
         this.isAttacking = false;
         this.isFastFalling = false;
+
+        // ── Attack state ──────────────────────────────────────────────
+        this.isAttackingLight = false;   // Mouse left click
+        this.isAttackingHeavy = false;   // Mouse right click
+
+        // Internal animation timers (seconds)
+        this._lightTimer  = 0;
+        this._lightDur    = 0.25;   // full animation duration
+        this._heavyTimer  = 0;
+        this._heavyDur    = 0.55;   // heavier, slower wind-up
+
+        // Store original mesh transform so we can restore it
+        this._baseScale    = this.mesh.scale.clone();
+        this._baseRotation = this.mesh.rotation.clone();
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Public API — called by PlayerController / GameScene
+    // ─────────────────────────────────────────────────────────────────
+
+    /** Light attack (Mouse Left). Ignored if already attacking. */
+    startLightAttack() {
+        if (this.isStunned || this.isAttackingLight || this.isAttackingHeavy) return;
+        this.isAttackingLight = true;
+        this._lightTimer = this._lightDur;
+    }
+
+    /** Heavy attack (Mouse Right). Ignored if already attacking. */
+    startHeavyAttack() {
+        if (this.isStunned || this.isAttackingLight || this.isAttackingHeavy) return;
+        this.isAttackingHeavy = true;
+        this._heavyTimer = this._heavyDur;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Procedural animations
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Light attack — quick forward lunge + squash/stretch.
+     *  0%→40%  : punch forward (scale Z squash, scale X/Y stretch)
+     *  40%→100%: return to normal
+     */
+    _animateLightAttack(deltaTime) {
+        this._lightTimer -= deltaTime;
+        const t = 1 - Math.max(0, this._lightTimer) / this._lightDur; // 0→1
+
+        if (t < 0.4) {
+            // Wind-up / punch-out
+            const p = t / 0.4;                    // 0→1 within this phase
+            this.mesh.scale.z = 1 + p * 0.6;      // stretch forward
+            this.mesh.scale.x = 1 - p * 0.25;     // squash sides
+            this.mesh.scale.y = 1 - p * 0.15;
+            this.mesh.rotation.x = -p * 0.35;     // tip forward
+        } else {
+            // Snap back with slight overshoot (easeOutElastic feel)
+            const p = (t - 0.4) / 0.6;            // 0→1 within this phase
+            const bounce = Math.sin(p * Math.PI);  // smooth return
+            this.mesh.scale.z = 1 + (1 - p) * 0.15 * bounce;
+            this.mesh.scale.x = 1;
+            this.mesh.scale.y = 1;
+            this.mesh.rotation.x = -(1 - p) * 0.1 * bounce;
+        }
+
+        if (this._lightTimer <= 0) {
+            this._resetMeshTransform();
+            this.isAttackingLight = false;
+        }
+    }
+
+    /**
+     * Heavy attack — slow charge + big slam + screen-shake-like wobble.
+     *  0%→30%  : charge (shrink back / lean back)
+     *  30%→60% : slam forward (big stretch)
+     *  60%→100%: decay wobble back to idle
+     */
+    _animateHeavyAttack(deltaTime) {
+        this._heavyTimer -= deltaTime;
+        const t = 1 - Math.max(0, this._heavyTimer) / this._heavyDur; // 0→1
+
+        if (t < 0.3) {
+            // Charge — lean back
+            const p = t / 0.3;
+            this.mesh.scale.z = 1 - p * 0.35;
+            this.mesh.scale.x = 1 + p * 0.25;
+            this.mesh.scale.y = 1 + p * 0.20;
+            this.mesh.rotation.x = p * 0.45;       // tip backward
+        } else if (t < 0.6) {
+            // Slam — explosive forward
+            const p = (t - 0.3) / 0.3;
+            this.mesh.scale.z = 0.65 + p * 1.1;    // 0.65 → 1.75
+            this.mesh.scale.x = 1.25 - p * 0.5;
+            this.mesh.scale.y = 1.20 - p * 0.4;
+            this.mesh.rotation.x = 0.45 - p * 0.9; // tip backward → forward
+        } else {
+            // Decay wobble
+            const p = (t - 0.6) / 0.4;
+            const wobble = Math.sin(p * Math.PI * 3) * (1 - p); // damped oscillation
+            this.mesh.scale.z = 1 + wobble * 0.18;
+            this.mesh.scale.x = 1 - wobble * 0.08;
+            this.mesh.scale.y = 1 - wobble * 0.06;
+            this.mesh.rotation.x = wobble * 0.12;
+        }
+
+        if (this._heavyTimer <= 0) {
+            this._resetMeshTransform();
+            this.isAttackingHeavy = false;
+        }
+    }
+
+    /** Idle animation — gentle floating bob */
+    _animateIdle(deltaTime) {
+        const t = performance.now() * 0.001;
+        this.mesh.position.y = Math.sin(t * 1.8) * 0.04;
+    }
+
+    /** Running animation — side-to-side tilt */
+    _animateRunning(deltaTime) {
+        const t = performance.now() * 0.001;
+        this.mesh.rotation.z = Math.sin(t * 10) * 0.08;
+    }
+
+    _resetMeshTransform() {
+        this.mesh.scale.set(1, 1, 1);
+        this.mesh.rotation.x = 0;
+        this.mesh.rotation.z = 0;
+        this.mesh.position.y = 0;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Existing game logic (unchanged)
+    // ─────────────────────────────────────────────────────────────────
 
     handleInput(keys) {
         if (this.isStunned || this.isDashing) return;
@@ -137,6 +268,13 @@ export class Player extends THREE.Group {
         this.isAttacking = false;
         this.hitboxMesh.visible = false;
         this.isFastFalling = false;
+
+        // Interrupt any attack animations
+        this.isAttackingLight = false;
+        this.isAttackingHeavy = false;
+        this._lightTimer = 0;
+        this._heavyTimer = 0;
+        this._resetMeshTransform();
     }
 
     update(deltaTime, platforms) {
@@ -154,14 +292,12 @@ export class Player extends THREE.Group {
 
         if (this.isDashing) {
             this.dashTimer -= deltaTime;
-            // Curva ease-out quadratica: parte veloce e decelera gradualmente
             const progress = Math.max(0, this.dashTimer / 0.45);
             const easedProgress = progress * progress;
             this.velocity.x = this.dashDirection.x * Config.dashForce * 8 * easedProgress;
             this.velocity.z = this.dashDirection.z * Config.dashForce * 8 * easedProgress;
             if (this.dashTimer <= 0) {
                 this.isDashing = false;
-                // Inerzia naturale: non si azzera la velocità di scatto
             }
         }
 
@@ -219,6 +355,21 @@ export class Player extends THREE.Group {
             }
         }
 
+        // ── Animation state machine ───────────────────────────────────
+        if (this.isAttackingLight) {
+            this._animateLightAttack(deltaTime);
+        } else if (this.isAttackingHeavy) {
+            this._animateHeavyAttack(deltaTime);
+        } else {
+            const isMoving = Math.abs(this.velocity.x) > 0.5 || Math.abs(this.velocity.z) > 0.5;
+            if (isMoving) {
+                this._animateRunning(deltaTime);
+            } else {
+                this._animateIdle(deltaTime);
+            }
+        }
+        // ─────────────────────────────────────────────────────────────
+
         if (Math.abs(this.position.x) > Config.arenaBounds.x || 
             this.position.y < -15 || 
             Math.abs(this.position.z) > Config.arenaBounds.z) {
@@ -233,5 +384,10 @@ export class Player extends THREE.Group {
         this.isStunned = false;
         this.jumpsLeft = 2;
         this.isFastFalling = false;
+        this.isAttackingLight = false;
+        this.isAttackingHeavy = false;
+        this._lightTimer = 0;
+        this._heavyTimer = 0;
+        this._resetMeshTransform();
     }
 }
