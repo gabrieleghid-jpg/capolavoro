@@ -18,20 +18,14 @@ export class GameScene {
         this.camera.position.set(0, 30, 50);
         this.camera.lookAt(0, 0, 0);
 
-        try {
-            this.renderer = new THREE.WebGLRenderer({ 
-                antialias: window.devicePixelRatio < 2, // Disable antialias on high DPI for performance
-                powerPreference: "high-performance" 
-            });
-        } catch (e) {
-            console.error("WebGL initialization failed, trying without antialias", e);
-            this.renderer = new THREE.WebGLRenderer();
-        }
-
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.container.appendChild(this.renderer.domElement);
+
+        // Disable right-click context menu so it can be used as game input
+        this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // Brighter Lights
         const ambient = new THREE.AmbientLight(0xffffff, 0.8);
