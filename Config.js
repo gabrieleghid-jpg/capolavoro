@@ -1,5 +1,5 @@
 export const Config = {
-    gravity: -0.017,
+    gravity: -0.097,
     jumpForce: 1.4,
     moveSpeed: 0.20,
     maxMoveSpeed: 7.0,

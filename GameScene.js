@@ -18,7 +18,16 @@ export class GameScene {
         this.camera.position.set(0, 30, 50);
         this.camera.lookAt(0, 0, 0);
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        try {
+            this.renderer = new THREE.WebGLRenderer({ 
+                antialias: window.devicePixelRatio < 2, // Disable antialias on high DPI for performance
+                powerPreference: "high-performance" 
+            });
+        } catch (e) {
+            console.error("WebGL initialization failed, trying without antialias", e);
+            this.renderer = new THREE.WebGLRenderer();
+        }
+
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;

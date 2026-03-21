@@ -48,7 +48,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(help);
 
     const gameContainer = document.createElement('div');
+    gameContainer.style.width = '100vw';
+    gameContainer.style.height = '100vh';
+    gameContainer.style.position = 'fixed';
+    gameContainer.style.top = '0';
+    gameContainer.style.left = '0';
+    gameContainer.style.zIndex = '-1';
     document.body.appendChild(gameContainer);
 
-    new GameScene(gameContainer);
+    // Prevent duplicate initialization
+    if (window._gameInstance) {
+        return;
+    }
+    window._gameInstance = new GameScene(gameContainer);
 });
