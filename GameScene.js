@@ -50,11 +50,24 @@ export class GameScene {
 
         // Input
         this.keys = {};
+
         window.addEventListener('keydown', (e) => {
+            // Prevent Space/Arrow keys from scrolling the page (causes black screen)
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.preventDefault();
+            }
+
+            // Only trigger one-shot actions on the first keydown (not held)
+            if (!this.keys[e.code]) {
+                this.handlePlayerAction(e.code);
+            }
+
             this.keys[e.code] = true;
-            this.handlePlayerAction(e.code);
         });
-        window.addEventListener('keyup', (e) => this.keys[e.code] = false);
+
+        window.addEventListener('keyup', (e) => {
+            this.keys[e.code] = false;
+        });
 
         window.addEventListener('mousedown', (e) => {
             if (e.button === 0) this.player1.attack();
@@ -71,8 +84,12 @@ export class GameScene {
     }
 
     handlePlayerAction(code) {
-        if (code === 'Space' || code === 'ArrowUp') this.player1.jump();
-        if (code === 'KeyE' || code === 'ShiftLeft') this.player1.dash();
+        // Jump: Space or W (only upward, ArrowUp is now movement)
+        if (code === 'Space') this.player1.jump();
+        // Dash: Shift or E
+        if (code === 'ShiftLeft' || code === 'ShiftRight' || code === 'KeyE') this.player1.dash();
+        // Attack: F or Z
+        if (code === 'KeyF' || code === 'KeyZ') this.player1.attack();
     }
 
     // AI completamente disabilitata — player2 rimane fermo
