@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Player } from './Player.js';
 import { Arena } from './Arena.js';
 import { Config } from './Config.js';
+import { HitFeedback } from './Hitfeedback.js';
 
 export class GameScene {
     constructor(container) {
@@ -50,6 +51,9 @@ export class GameScene {
         this.player2 = new Player(2, Config.colors.player2, 8);
         this.scene.add(this.player1);
         this.scene.add(this.player2);
+
+        // Hit feedback (sound + particles + victim shake/flash)
+        this.hitFeedback = new HitFeedback(this.scene);
 
         // Input
         this.keys = {};
@@ -105,6 +109,43 @@ export class GameScene {
         this.checkPlayerAttack(this.player1, this.player2);
     }
 
+    /**
+     * Punch hitbox collision detection (light & heavy attacks).
+     * Uses THREE.Box3 AABB intersection in world space.
+     * On hit: triggers sound, particles, and victim feedback.
+     */
+    checkPunchCollisions() {
+        const hitboxes = this.player1.getActiveHitboxes();
+        if (hitboxes.length === 0) return;
+
+        // Build target bounding box once per frame (world space)
+        const targetBox = new THREE.Box3().setFromObject(this.player2);
+
+        for (const { mesh, type } of hitboxes) {
+            // Guard: skip if this hitbox already registered a hit this activation
+            if (mesh._hitRegistered) continue;
+
+            const hitBox = new THREE.Box3().setFromObject(mesh);
+
+            if (hitBox.intersectsBox(targetBox)) {
+                // Mark so we don't fire multiple times per swing
+                mesh._hitRegistered = true;
+                setTimeout(() => { mesh._hitRegistered = false; }, 500);
+
+                // Contact point = center of overlap between the two boxes
+                const overlap = new THREE.Box3();
+                hitBox.intersect(targetBox, overlap);
+                const contactPoint = new THREE.Vector3();
+                overlap.getCenter(contactPoint);
+
+                // Trigger all feedback
+                this.hitFeedback.onHit(contactPoint, type, this.player2);
+
+                console.log(`Manichino colpito! [${type}] @ ${contactPoint.x.toFixed(1)}, ${contactPoint.y.toFixed(1)}, ${contactPoint.z.toFixed(1)}`);
+            }
+        }
+    }
+
     checkPlayerAttack(attacker, victim) {
         if (!attacker.isAttacking) return;
         
@@ -144,6 +185,8 @@ export class GameScene {
         this.player2.update(deltaTime, this.arena.platforms);
 
         this.checkAttacks();
+        this.checkPunchCollisions();
+        this.hitFeedback.update(deltaTime);
         this.updateUI();
 
         // Dynamic 3D Camera

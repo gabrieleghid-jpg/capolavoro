@@ -18,11 +18,37 @@ export class Player extends THREE.Group {
         this.mesh = new THREE.Mesh(geometry, material);
         this.add(this.mesh);
 
+        // ── Legacy hitbox (kept for applyKnockback compatibility) ─────
         this.hitboxMesh = new THREE.Mesh(
             new THREE.BoxGeometry(2, 2, 2),
-            new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, visible: false })
+            new THREE.MeshBasicMaterial({ visible: false })
         );
         this.add(this.hitboxMesh);
+
+        // ── Light punch hitbox — small, fast, close range ─────────────
+        this.punchHitboxLight = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 1.0, 1.2),
+            new THREE.MeshBasicMaterial({
+                color: 0x00ffff, wireframe: true,
+                transparent: true, opacity: 0.6, visible: false
+            })
+        );
+        // Offset: in front of player, at chest height
+        this.punchHitboxLight.position.set(0, 0.2, 1.5);
+        this.punchHitboxLight.active = false;
+        this.add(this.punchHitboxLight);
+
+        // ── Heavy punch hitbox — larger, slower, longer reach ─────────
+        this.punchHitboxHeavy = new THREE.Mesh(
+            new THREE.BoxGeometry(1.8, 1.4, 2.0),
+            new THREE.MeshBasicMaterial({
+                color: 0xff6600, wireframe: true,
+                transparent: true, opacity: 0.6, visible: false
+            })
+        );
+        this.punchHitboxHeavy.position.set(0, 0.1, 2.0);
+        this.punchHitboxHeavy.active = false;
+        this.add(this.punchHitboxHeavy);
 
         this.position.set(initialX, 5, 0);
         this.velocity = new THREE.Vector3();
@@ -46,9 +72,14 @@ export class Player extends THREE.Group {
 
         // Internal animation timers (seconds)
         this._lightTimer  = 0;
-        this._lightDur    = 0.25;   // full animation duration
+        this._lightDur    = 0.25;
         this._heavyTimer  = 0;
-        this._heavyDur    = 0.55;   // heavier, slower wind-up
+        this._heavyDur    = 0.55;
+
+        // Hit reaction
+        this._shakeTimer    = 0;
+        this._shakeDuration = 0;
+        this._shakeAmount   = 0;
 
         // Store original mesh transform so we can restore it
         this._baseScale    = this.mesh.scale.clone();
@@ -64,6 +95,9 @@ export class Player extends THREE.Group {
         if (this.isStunned || this.isAttackingLight || this.isAttackingHeavy) return;
         this.isAttackingLight = true;
         this._lightTimer = this._lightDur;
+
+        // Activate light hitbox at peak of punch (after wind-up: 40% of duration)
+        this._activateHitboxDelayed(this.punchHitboxLight, this._lightDur * 0.40, this._lightDur * 0.25);
     }
 
     /** Heavy attack (Mouse Right). Ignored if already attacking. */
@@ -71,6 +105,26 @@ export class Player extends THREE.Group {
         if (this.isStunned || this.isAttackingLight || this.isAttackingHeavy) return;
         this.isAttackingHeavy = true;
         this._heavyTimer = this._heavyDur;
+
+        // Activate heavy hitbox at slam peak (after charge: 30% of duration)
+        this._activateHitboxDelayed(this.punchHitboxHeavy, this._heavyDur * 0.30, this._heavyDur * 0.30);
+    }
+
+    /**
+     * Activates a hitbox after `delay` seconds, keeps it active for `duration` seconds.
+     * @param {THREE.Mesh} hitbox
+     * @param {number} delay    seconds before activation
+     * @param {number} duration seconds the hitbox stays active
+     */
+    _activateHitboxDelayed(hitbox, delay, duration) {
+        setTimeout(() => {
+            hitbox.visible = true;
+            hitbox.active  = true;
+            setTimeout(() => {
+                hitbox.visible = false;
+                hitbox.active  = false;
+            }, duration * 1000);
+        }, delay * 1000);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -166,6 +220,70 @@ export class Player extends THREE.Group {
         this.mesh.rotation.x = 0;
         this.mesh.rotation.z = 0;
         this.mesh.position.y = 0;
+    }
+
+    /** Force-deactivate both punch hitboxes (used on knockback / respawn). */
+    _deactivateAllHitboxes() {
+        this.punchHitboxLight.visible = false;
+        this.punchHitboxLight.active  = false;
+        this.punchHitboxHeavy.visible = false;
+        this.punchHitboxHeavy.active  = false;
+    }
+
+    /**
+     * Called by HitFeedback.onHit() when this player/dummy is struck.
+     * Triggers a shake + emissive flash on the mesh.
+     * @param {'light'|'heavy'} type
+     */
+    receiveHit(type) {
+        const isHeavy = type === 'heavy';
+
+        // Flash: switch emissive to white briefly
+        this.mesh.material.emissive.set(0xffffff);
+        this.mesh.material.emissiveIntensity = isHeavy ? 1.8 : 1.0;
+
+        // Shake: store origin and start shaking
+        this._shakeTimer    = isHeavy ? 0.25 : 0.14;
+        this._shakeDuration = this._shakeTimer;
+        this._shakeAmount   = isHeavy ? 0.30 : 0.16;
+
+        // Restore emissive after flash duration
+        const flashDur = isHeavy ? 120 : 70; // ms
+        setTimeout(() => {
+            this.mesh.material.emissive.setHex(this.color);
+            this.mesh.material.emissiveIntensity = 0.3;
+        }, flashDur);
+    }
+
+    /** Advance hit-shake animation. Called inside update(). */
+    _updateShake(deltaTime) {
+        if (this._shakeTimer <= 0) return;
+        this._shakeTimer -= deltaTime;
+
+        const t      = this._shakeTimer / this._shakeDuration; // 1→0
+        const amount = this._shakeAmount * t;                  // fades out
+
+        // Rapid oscillation on X and Z
+        const freq = 40;
+        const time = performance.now() * 0.001;
+        this.mesh.position.x = Math.sin(time * freq)       * amount;
+        this.mesh.position.z = Math.cos(time * freq * 0.7) * amount;
+
+        if (this._shakeTimer <= 0) {
+            this.mesh.position.x = 0;
+            this.mesh.position.z = 0;
+        }
+    }
+
+    /**
+     * Returns all currently active punch hitboxes as {mesh, type} objects.
+     * Used by GameScene to run collision detection each frame.
+     */
+    getActiveHitboxes() {
+        const active = [];
+        if (this.punchHitboxLight.active) active.push({ mesh: this.punchHitboxLight, type: 'light' });
+        if (this.punchHitboxHeavy.active) active.push({ mesh: this.punchHitboxHeavy, type: 'heavy' });
+        return active;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -275,6 +393,7 @@ export class Player extends THREE.Group {
         this._lightTimer = 0;
         this._heavyTimer = 0;
         this._resetMeshTransform();
+        this._deactivateAllHitboxes();
     }
 
     update(deltaTime, platforms) {
@@ -368,6 +487,9 @@ export class Player extends THREE.Group {
                 this._animateIdle(deltaTime);
             }
         }
+
+        // Hit shake (runs independently of attack state)
+        this._updateShake(deltaTime);
         // ─────────────────────────────────────────────────────────────
 
         if (Math.abs(this.position.x) > Config.arenaBounds.x || 
@@ -389,5 +511,6 @@ export class Player extends THREE.Group {
         this._lightTimer = 0;
         this._heavyTimer = 0;
         this._resetMeshTransform();
+        this._deactivateAllHitboxes();
     }
 }
